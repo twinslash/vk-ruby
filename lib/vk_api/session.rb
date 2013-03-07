@@ -25,11 +25,19 @@ module VkApi
   # отключении от сервера нет.
   # Экземпляр +Session+ может обрабатывать все методы, поддерживаемые API ВКонтакте
   # путём делегирования запросов.
+
+
   class Session
     VK_API_URL = 'https://api.vk.com'
     VK_OBJECTS = %w(users friends photos wall audio video places secure language notes pages offers
       questions messages newsfeed status polls subscriptions likes)
     attr_accessor :app_id, :api_secret
+
+    @@counter = {}
+    # Counter schema: {"time" => {"token" => count, "token2" => count2, ...}}
+    # "time" stores in Unix time
+    # "token" comes from request
+    # count is a number of requests in this second
 
     # Конструктор. Получает следующие аргументы:
     # * app_id: ID приложения ВКонтакте.
@@ -61,15 +69,48 @@ module VkApi
       uri = URI.parse(path)
 
       # build Post request to VK (using https)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = true
-      request = Net::HTTP::Post.new(uri.request_uri)
-      request.set_form_data(params)
-
-      response = JSON.parse(http.request(request).body)
+      @http = Net::HTTP.new(uri.host, uri.port)
+      @http.use_ssl = true
+      @request = Net::HTTP::Post.new(uri.request_uri)
+      @request.set_form_data(params)
+      response = execute_request(Time.now.to_i, params['access_token'])
 
       raise ServerError.new self, method, params, response['error'] if response['error']
       response['response']
+    end
+
+    def execute_request(time, token)
+      @@counter = {} unless @@counter[time]
+      if request_can_be_executed_now?(time, token)
+        update_counter(time, token)
+        JSON.parse(@http.request(@request).body)
+      else
+        sleep(1)
+        update_counter(time + 1, token)
+        JSON.parse(@http.request(@request).body)
+      end
+    end
+
+    def request_can_be_executed_now?(time, token)
+      !@@counter[time] || # counter for this second is empty
+      !@@counter[time][token] || # counter for this token is empty
+      @@counter[time][token] < 3 # less than 3 requests for this token are executed
+    end
+
+    def update_counter(time, token)
+      if @@counter.nil? || @@counter.empty?
+        @@counter = { time => { token => 1 } }
+      else
+        if @@counter[time].nil?
+          @@counter = { time => { token => 1 } }
+        else
+          if @@counter[time][token].nil?
+            @@counter[time][token] = 1
+          else
+            @@counter[time][token] = @@counter[time][token] + 1
+          end
+        end
+      end
     end
 
     # Генерирует подпись запроса
