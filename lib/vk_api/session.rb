@@ -73,7 +73,7 @@ module VkApi
       @http.use_ssl = true
       @request = Net::HTTP::Post.new(uri.request_uri)
       @request.set_form_data(params)
-      response = execute_request(Time.now.to_i, params['access_token'])
+      response = execute_request(Time.now.to_i)
 
       raise ServerError.new self, method, params, response['error'] if response['error']
       response['response']
