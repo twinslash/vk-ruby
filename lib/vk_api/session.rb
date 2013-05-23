@@ -28,15 +28,15 @@ module VkApi
 
 
   class Session
+    MAX_REQUESTS_PER_SECOND = 5
     VK_API_URL = 'https://api.vk.com'
     VK_OBJECTS = %w(users friends photos wall audio video places secure language notes pages offers
       questions messages newsfeed status polls subscriptions likes)
     attr_accessor :app_id, :api_secret
 
-    @@counter = {}
-    # Counter schema: {"time" => {"token" => count, "token2" => count2, ...}}
+    @@requests_count = { Time.now.to_i => 0 }
+    # Counter schema: {"time" => count }
     # "time" stores in Unix time
-    # "token" comes from request
     # count is a number of requests in this second
 
     # Конструктор. Получает следующие аргументы:
@@ -79,37 +79,31 @@ module VkApi
       response['response']
     end
 
-    def execute_request(time, token)
-      @@counter = {} unless @@counter[time]
-      if request_can_be_executed_now?(time, token)
-        update_counter(time, token)
+    def execute_request(time)
+      @@requests_count = { Time.now.to_i => 0 } unless @@requests_count[time]
+      if request_can_be_executed_now?(time)
+        update_counter(time)
         JSON.parse(@http.request(@request).body)
       else
         sleep(1)
-        update_counter(time + 1, token)
+        update_counter(time + 1)
         JSON.parse(@http.request(@request).body)
       end
     end
 
-    def request_can_be_executed_now?(time, token)
-      !@@counter[time] || # counter for this second is empty
-      !@@counter[time][token] || # counter for this token is empty
-      @@counter[time][token] < 3 # less than 3 requests for this token are executed
+    def request_can_be_executed_now?(time)
+      # counter for this second is empty
+      !@@requests_count[time] ||
+
+      # less than max requests per this second are executed
+      @@requests_count[time] < MAX_REQUESTS_PER_SECOND
     end
 
-    def update_counter(time, token)
-      if @@counter.nil? || @@counter.empty?
-        @@counter = { time => { token => 1 } }
+    def update_counter(time)
+      if @@requests_count[time].nil?
+        @@requests_count = { time => 0 }
       else
-        if @@counter[time].nil?
-          @@counter = { time => { token => 1 } }
-        else
-          if @@counter[time][token].nil?
-            @@counter[time][token] = 1
-          else
-            @@counter[time][token] = @@counter[time][token] + 1
-          end
-        end
+        @@requests_count[time] = @@requests_count[time] + 1
       end
     end
 
