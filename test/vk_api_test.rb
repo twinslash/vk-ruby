@@ -13,51 +13,81 @@ describe VkApi do
       assert_equal session.instance_variable_get(:@prefix), 'prefix'
     end
 
-    describe '@@requests_count' do
+    describe '@@counter' do
       it "should exist" do
-        assert_equal VkApi::Session.class_variables.include?(:@@requests_count), true
+        assert_equal VkApi::Session.class_variables.include?(:@@counter), true
       end
 
-      it 'should not be empty after start' do
-        assert_equal VkApi::Session.class_variable_get(:@@requests_count).to_a.length, 1
+      it 'should be empty after start' do
+        assert_equal VkApi::Session.class_variable_get(:@@counter), {}
       end
     end
 
 
     describe 'request_can_be_executed_now?' do
-      it 'should return true if counter for current time is less then maximum' do
+      it 'should return true if counter is empty' do
         session = VkApi::Session.new "app_id", "api_secret", "prefix"
-        time = Time.now.to_i
-        VkApi::Session.class_variable_set(:@@requests_count, {time => 4 })
-        assert_equal session.request_can_be_executed_now?(time), true
+        VkApi::Session.class_variable_set(:@@counter, {})
+        assert_equal session.request_can_be_executed_now?('time', 'token'), true
       end
 
-      it 'should return false if counter for current time is maximum' do
+      it 'should return true if no token for current time' do
         session = VkApi::Session.new "app_id", "api_secret", "prefix"
-        time = Time.now.to_i
-        VkApi::Session.class_variable_set(:@@requests_count, {time => 5})
-        assert_equal session.request_can_be_executed_now?(time), false
+        VkApi::Session.class_variable_set(:@@counter, {'time' => {"token0" => 3}})
+        assert_equal session.request_can_be_executed_now?('time', 'token'), true
+      end
+
+      it 'should return true if token for current time is less then 3' do
+        session = VkApi::Session.new "app_id", "api_secret", "prefix"
+        VkApi::Session.class_variable_set(:@@counter, {'time' => {"token" => 2}})
+        assert_equal session.request_can_be_executed_now?('time', 'token'), true
+      end
+
+      it 'should return false if token for current time is 3' do
+        session = VkApi::Session.new "app_id", "api_secret", "prefix"
+        VkApi::Session.class_variable_set(:@@counter, {'time' => {"token" => 3}})
+        assert_equal session.request_can_be_executed_now?('time', 'token'), false
       end
     end
 
     describe 'update_counter' do
+      it 'should set current time if counter is empty' do
+        session = VkApi::Session.new "app_id", "api_secret", "prefix"
+        time = Time.now.to_i
+        VkApi::Session.class_variable_set(:@@counter, {})
+        session.update_counter(time, 'token')
+        assert_equal  VkApi::Session.class_variable_get(:@@counter), { time => { 'token' => 1 } }
+
+        VkApi::Session.class_variable_set(:@@counter, nil)
+        session.update_counter(time, 'token')
+        assert_equal  VkApi::Session.class_variable_get(:@@counter), { time => { 'token' => 1 } }
+      end
 
       it 'should set current time if counter time is less then current time' do
         time = Time.now.to_i
-        VkApi::Session.class_variable_set(:@@requests_count, { (time - 1) => 4 })
+        VkApi::Session.class_variable_set(:@@counter, { (time - 1) => {:some => :thing}})
         session = VkApi::Session.new "app_id", "api_secret", "prefix"
-        session.update_counter(time)
+        session.update_counter(time, 'token')
 
-        assert_equal  VkApi::Session.class_variable_get(:@@requests_count), { time => 0 }
+        assert_equal  VkApi::Session.class_variable_get(:@@counter), { time => { 'token' => 1 } }
       end
 
-      it 'should increment count by 1' do
+      it 'should set count to 1 if no token in current time' do
         time = Time.now.to_i
-        VkApi::Session.class_variable_set(:@@requests_count, { time => 2})
+        VkApi::Session.class_variable_set(:@@counter, { time => {'token0' => 1}})
         session = VkApi::Session.new "app_id", "api_secret", "prefix"
-        session.update_counter(time)
+        session.update_counter(time, 'token1')
 
-        assert_equal  VkApi::Session.class_variable_get(:@@requests_count), { time => 3 }
+        assert_equal  VkApi::Session.class_variable_get(:@@counter), { time => {'token0'=>1, 'token1'=>1} }
+      end
+
+      it 'should set increment count by 1 if token exists' do
+        time = Time.now.to_i
+        VkApi::Session.class_variable_set(:@@counter, { time => {'token' => 2}})
+        session = VkApi::Session.new "app_id", "api_secret", "prefix"
+        session.update_counter(time, 'token')
+
+        assert_equal  VkApi::Session.class_variable_get(:@@counter), { time => {'token' => 3} }
       end
     end
   end
