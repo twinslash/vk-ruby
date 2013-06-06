@@ -28,13 +28,14 @@ module VkApi
 
 
   class Session
+    REQUESTS_PER_SECOND = 3
     VK_API_URL = 'https://api.vk.com'
     VK_OBJECTS = %w(users friends photos wall audio video places secure language notes pages offers
       questions messages newsfeed status polls subscriptions likes)
     attr_accessor :app_id, :api_secret
 
     @@counter = {}
-    # Counter schema: {"time" => {"token" => count, "token2" => count2, ...}}
+    # Counter schema: {"token1" => [time11, time12, time13], 'token2' => [time21, tome22, time23], ...}
     # "time" stores in Unix time
     # "token" comes from request
     # count is a number of requests in this second
@@ -92,22 +93,24 @@ module VkApi
     end
 
     def request_can_be_executed_now?(time, token)
-      !@@counter[time] || # counter for this second is empty
-      !@@counter[time][token] || # counter for this token is empty
-      @@counter[time][token] < 3 # less than 3 requests for this token are executed
+      !@@counter[token] || # no requests for this token
+      !@@counter[token].first || # times array is empty
+      @@counter[time].length < REQUESTS_PER_SECOND ||
+      time - @@counter[time].first > 1 # three requests.per second rule
     end
 
     def update_counter(time, token)
       if @@counter.nil? || @@counter.empty?
-        @@counter = { time => { token => 1 } }
+        @@counter = { token => [time] }
       else
-        if @@counter[time].nil?
-          @@counter = { time => { token => 1 } }
+        if @@counter[token].nil?
+          @@counter[token] = [time]
         else
-          if @@counter[time][token].nil?
-            @@counter[time][token] = 1
+          if @@counter[token].length < REQUESTS_PER_SECOND
+            @@counter[token] << time
           else
-            @@counter[time][token] = @@counter[time][token] + 1
+            @@counter[token] << time
+            @@counter[token] = @@counter[token].drop(1)
           end
         end
       end

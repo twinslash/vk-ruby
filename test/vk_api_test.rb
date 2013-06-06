@@ -31,22 +31,23 @@ describe VkApi do
         assert_equal session.request_can_be_executed_now?('time', 'token'), true
       end
 
-      it 'should return true if no token for current time' do
+      it 'should return true if no requests for current second' do
         session = VkApi::Session.new "app_id", "api_secret", "prefix"
-        VkApi::Session.class_variable_set(:@@counter, {'time' => {"token0" => 3}})
-        assert_equal session.request_can_be_executed_now?('time', 'token'), true
+        VkApi::Session.class_variable_set(:@@counter, {'token' => [Time.now.to_f - 2]})
+        assert_equal session.request_can_be_executed_now?('time', Time.now.to_f), true
       end
 
       it 'should return true if token for current time is less then 3' do
         session = VkApi::Session.new "app_id", "api_secret", "prefix"
-        VkApi::Session.class_variable_set(:@@counter, {'time' => {"token" => 2}})
+        VkApi::Session.class_variable_set(:@@counter, {'token' => [Time.now.to_f, Time.now.to_f]})
         assert_equal session.request_can_be_executed_now?('time', 'token'), true
       end
 
       it 'should return false if token for current time is 3' do
         session = VkApi::Session.new "app_id", "api_secret", "prefix"
-        VkApi::Session.class_variable_set(:@@counter, {'time' => {"token" => 3}})
-        assert_equal session.request_can_be_executed_now?('time', 'token'), false
+        VkApi::Session.class_variable_set(:@@counter,
+                                          {'token' => [Time.now.to_f, Time.now.to_f, Time.now.to_f] })
+        assert_equal session.request_can_be_executed_now?('token', Time.now.to_f), false
       end
     end
 
