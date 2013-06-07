@@ -95,8 +95,8 @@ module VkApi
     def request_can_be_executed_now?(time, token)
       !@@counter[token] || # no requests for this token
       !@@counter[token].first || # times array is empty
-      @@counter[time].length < REQUESTS_PER_SECOND ||
-      time - @@counter[time].first > 1 # three requests.per second rule
+      time - @@counter[token].first > 1 || # third request executed more than a second ago
+      @@counter[token].length < REQUESTS_PER_SECOND # three requests.per second rule
     end
 
     def update_counter(time, token)
