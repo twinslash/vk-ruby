@@ -35,10 +35,9 @@ module VkApi
     attr_accessor :app_id, :api_secret
 
     @@counter = {}
-    # Counter schema: {"token1" => [time11, time12, time13], 'token2' => [time21, tome22, time23], ...}
+    # Counter schema: {"token1" => [time11, time12, time13], 'token2' => [time21, time22, time23], ...}
     # "time" stores in Unix time
     # "token" comes from request
-    # count is a number of requests in this second
 
     # Конструктор. Получает следующие аргументы:
     # * app_id: ID приложения ВКонтакте.
@@ -81,7 +80,7 @@ module VkApi
     end
 
     def execute_request(time, token)
-      @@counter = {} unless @@counter[time]
+      @@counter[token] = [] unless @@counter[token]
       if request_can_be_executed_now?(time, token)
         update_counter(time, token)
         JSON.parse(@http.request(@request).body)
@@ -94,9 +93,9 @@ module VkApi
 
     def request_can_be_executed_now?(time, token)
       !@@counter[token] || # no requests for this token
-      !@@counter[token].first || # times array is empty
+      !@@counter[token].first || # times array for token is empty
       time - @@counter[token].first > 1 || # third request executed more than a second ago
-      @@counter[token].length < REQUESTS_PER_SECOND # three requests.per second rule
+      @@counter[token].length < REQUESTS_PER_SECOND # three requests per second rule
     end
 
     def update_counter(time, token)
