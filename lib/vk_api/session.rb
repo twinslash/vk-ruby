@@ -56,6 +56,7 @@ module VkApi
       method = method.to_s.camelize(:lower)
       method = @prefix ? "#{@prefix}.#{method}" : method
       params[:method] = method
+      token = params[:access_token] || ''
       params[:api_id] = app_id
       params[:format] = 'json'
       params[:sig] = sig(params.tap do |s|
@@ -73,7 +74,7 @@ module VkApi
       @http.use_ssl = true
       @request = Net::HTTP::Post.new(uri.request_uri)
       @request.set_form_data(params)
-      response = execute_request(Time.now.to_i)
+      response = execute_request(Time.now.to_f, token)
 
       raise ServerError.new self, method, params, response['error'] if response['error']
       response['response']
