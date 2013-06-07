@@ -28,16 +28,16 @@ module VkApi
 
 
   class Session
-    MAX_REQUESTS_PER_SECOND = 5
+    REQUESTS_PER_SECOND = 3
     VK_API_URL = 'https://api.vk.com'
     VK_OBJECTS = %w(users friends photos wall audio video places secure language notes pages offers
       questions messages newsfeed status polls subscriptions likes)
     attr_accessor :app_id, :api_secret
 
-    @@requests_count = { Time.now.to_i => 0 }
-    # Counter schema: {"time" => count }
+    @@counter = {}
+    # Counter schema: {"token1" => [time11, time12, time13], 'token2' => [time21, time22, time23], ...}
     # "time" stores in Unix time
-    # count is a number of requests in this second
+    # "token" comes from request
 
     # Конструктор. Получает следующие аргументы:
     # * app_id: ID приложения ВКонтакте.
@@ -56,6 +56,7 @@ module VkApi
       method = method.to_s.camelize(:lower)
       method = @prefix ? "#{@prefix}.#{method}" : method
       params[:method] = method
+      token = params[:access_token] || ''
       params[:api_id] = app_id
       params[:format] = 'json'
       params[:sig] = sig(params.tap do |s|
@@ -73,37 +74,45 @@ module VkApi
       @http.use_ssl = true
       @request = Net::HTTP::Post.new(uri.request_uri)
       @request.set_form_data(params)
-      response = execute_request(Time.now.to_i)
+      response = execute_request(Time.now.to_f, token)
 
       raise ServerError.new self, method, params, response['error'] if response['error']
       response['response']
     end
 
-    def execute_request(time)
-      @@requests_count = { Time.now.to_i => 0 } unless @@requests_count[time]
-      if request_can_be_executed_now?(time)
-        update_counter(time)
+    def execute_request(time, token)
+      @@counter[token] = [] unless @@counter[token]
+      if request_can_be_executed_now?(time, token)
+        update_counter(time, token)
         JSON.parse(@http.request(@request).body)
       else
         sleep(1)
-        update_counter(time + 1)
+        update_counter(time + 1, token)
         JSON.parse(@http.request(@request).body)
       end
     end
 
-    def request_can_be_executed_now?(time)
-      # counter for this second is empty
-      !@@requests_count[time] ||
-
-      # less than max requests per this second are executed
-      @@requests_count[time] < MAX_REQUESTS_PER_SECOND
+    def request_can_be_executed_now?(time, token)
+      !@@counter[token] || # no requests for this token
+      !@@counter[token].first || # times array for token is empty
+      time - @@counter[token].first > 1 || # third request executed more than a second ago
+      @@counter[token].length < REQUESTS_PER_SECOND # three requests per second rule
     end
 
-    def update_counter(time)
-      if @@requests_count[time].nil?
-        @@requests_count = { time => 0 }
+    def update_counter(time, token)
+      if @@counter.nil? || @@counter.empty?
+        @@counter = { token => [time] }
       else
-        @@requests_count[time] = @@requests_count[time] + 1
+        if @@counter[token].nil?
+          @@counter[token] = [time]
+        else
+          if @@counter[token].length < REQUESTS_PER_SECOND
+            @@counter[token] << time
+          else
+            @@counter[token] << time
+            @@counter[token] = @@counter[token].drop(1)
+          end
+        end
       end
     end
 
